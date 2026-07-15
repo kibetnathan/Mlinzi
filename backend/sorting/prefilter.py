@@ -1,4 +1,4 @@
-import sorter
+import sorter_function as sorter
 import pandas as pd
 
 
