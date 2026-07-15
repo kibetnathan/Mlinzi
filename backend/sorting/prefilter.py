@@ -1,3 +1,7 @@
+"""
+Do not call these functions directly, call them from the sorter adapter class (see sorter.py)
+"""
+
 import sorter_function as sorter
 import pandas as pd
 
