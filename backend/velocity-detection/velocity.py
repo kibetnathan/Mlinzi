@@ -15,7 +15,7 @@ from datetime import timedelta
 N_THRESHOLD = 5 # more than the transactions
 X_HOURS = 2 # within this hours triggers a flag 
 
-RULE_NAME = 'velocity'
+
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_FILE = BASE_DIR.parent.parent /"data"/ "mlinzi_sample_transactions.csv"
