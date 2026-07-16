@@ -2,7 +2,7 @@
 Do not call these functions directly, call them from the sorter adapter class (see sorter.py)
 """
 
-import sorter_function as sorter
+from . import sorter_function as sorter
 import pandas as pd
 
 
@@ -43,7 +43,7 @@ def filter_max(df: pd.DataFrame, amount_col: str, max_value: float) -> pd.DataFr
         df_clean[amount_col] = pd.to_numeric(df_clean[amount_col], errors="coerce")
 
         # filter out NaN and filter out maximum values
-        filtered_df = df_clean[df_clean[amount_col] <= max_value]
+        filtered_df = df_clean[df_clean[amount_col] < max_value]
 
         print(
             f"Filtered out {len(df) - len(filtered_df)} transactions below {max_value}."
