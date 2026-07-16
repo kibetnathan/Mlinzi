@@ -12,6 +12,8 @@ class TransactionBase(SQLModel):
     amount: Optional[int] = None
     transaction_type: Optional[str] = None
     channel: Optional[str] = None
+    is_flagged: bool = Field(default=True)
+    flag: Optional[str] = None
 
 
 class Transaction(TransactionBase, table=True):
