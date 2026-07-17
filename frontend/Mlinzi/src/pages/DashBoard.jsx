@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 
-const API_BASE = import.meta.env.BASE_URL;
+const API_BASE = import.meta.env.VITE_BASE_URL;
 
 function DashBoard() {
   const [transactions, setTransactions] = useState([]);
@@ -456,4 +456,3 @@ function DashBoard() {
 }
 
 export default DashBoard;
-
