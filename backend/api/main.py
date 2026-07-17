@@ -9,7 +9,7 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BACKEND_DIR))
 
 CORS_ALLOWED_ORIGINS = [
-    "https://mlinzi-theta.vercel.app/",
+    "https://mlinzi-theta.vercel.app",
     "http://localhost:5173",
 ]
 
