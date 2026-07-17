@@ -10,6 +10,7 @@ sys.path.append(str(BACKEND_DIR))
 
 CORS_ALLOWED_ORIGINS = [
     "https://mlinzi-theta.vercel.app",
+    "https://mlinzi-tau.vercel.app",
     "http://localhost:5173",
 ]
 
