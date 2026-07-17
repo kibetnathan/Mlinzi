@@ -14,6 +14,8 @@ class TransactionBase(SQLModel):
     channel: Optional[str] = None
     is_flagged: bool = Field(default=True)
     flag: Optional[str] = None
+    reason: Optional[str] = None
+    severity: Optional[str] = None
 
 
 class Transaction(TransactionBase, table=True):
