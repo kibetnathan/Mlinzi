@@ -1,105 +1,13 @@
+import React, { useState, useEffect } from 'react';
 
-// // mock transaction dataset mapped with specific anomaly triggers
-// const initialTransactions = [
-//   {
-//     transaction_id: "TXN1016",
-//     customer_id: "CUST014",
-//     customer_name: "Michael Onyango",
-//     timestamp: "2026-07-01 08:14",
-//     amount_kes: 1200,
-//     transaction_type: "Deposit",
-//     channel: "ATM",
-//     anomalyType: "Round Number Anomaly",
-//     severity: "LOW",
-//     reason: "Even hundred metric matching static automated test deposits.",
-//     status: "Suspicious"
-//   },
-//   {
-//     transaction_id: "TXN1008",
-//     customer_id: "CUST009",
-//     customer_name: "Mercy Wambui",
-//     timestamp: "2026-07-01 08:46",
-//     amount_kes: 12000,
-//     transaction_type: "Transfer",
-//     channel: "Mobile",
-//     anomalyType: "Velocity",
-//     severity: "CRITICAL",
-//     reason: "High-value transfer followed instantly by secondary routing attempts.",
-//     status: "Flagged"
-//   },
-//   {
-//     transaction_id: "TXN1007",
-//     customer_id: "CUST009",
-//     customer_name: "Mercy Wambui",
-//     timestamp: "2026-07-01 09:22",
-//     amount_kes: 2300,
-//     transaction_type: "Transfer",
-//     channel: "Agent",
-//     anomalyType: "Velocity",
-//     severity: "HIGH",
-//     reason: "Secondary transfer execution within the same hour block.",
-//     status: "Flagged"
-//   },
-//   {
-//     transaction_id: "TXN1011",
-//     customer_id: "CUST011",
-//     customer_name: "Ruth Nyambura",
-//     timestamp: "2026-07-01 09:54",
-//     amount_kes: 15600,
-//     transaction_type: "Withdrawal",
-//     channel: "ATM",
-//     anomalyType: "Repeated Withdrawals",
-//     severity: "WARNING",
-//     reason: "Uncharacteristic ATM cash-out pattern relative to user historical limits.",
-//     status: "Flagged"
-//   },
-//   {
-//     transaction_id: "TXN1006",
-//     customer_id: "CUST008",
-//     customer_name: "John Kariuki",
-//     timestamp: "2026-07-01 10:13",
-//     amount_kes: 2300,
-//     transaction_type: "Withdrawal",
-//     channel: "Mobile",
-//     anomalyType: "Repeated Withdrawals",
-//     severity: "WARNING",
-//     reason: "Consecutive mobile withdrawal requests within minutes.",
-//     status: "Suspicious"
-//   },
-//   {
-//     transaction_id: "TXN1005",
-//     customer_id: "CUST008",
-//     customer_name: "John Kariuki",
-//     timestamp: "2026-07-01 10:44",
-//     amount_kes: 5400,
-//     transaction_type: "Deposit",
-//     channel: "Agent",
-//     anomalyType: "Round Number Anomaly",
-//     severity: "LOW",
-//     reason: "Rapid cash turnaround pattern - ATM extraction recycled back as Agent Deposit.",
-//     status: "Suspicious"
-//   },
-//   {
-//     transaction_id: "TXN1001",
-//     customer_id: "CUST003",
-//     customer_name: "Grace Njoki",
-//     timestamp: "2026-07-01 11:14",
-//     amount_kes: 750,
-//     transaction_type: "Transfer",
-//     channel: "Mobile",
-//     anomalyType: "Velocity",
-//     severity: "LOW",
-//     reason: "Micro-transfer clearing validation.",
-//     status: "Suspicious"
-//   }
-// ];
-import React, { useState , useEffect } from 'react';
-
-const API_BASE =  "http://127.0.0.1:8000"
+const API_BASE = "http://127.0.0.1:8000";
 
 function DashBoard() {
   const [transactions, setTransactions] = useState([]);
-  const [selectedTx, setSelectedTx] = useState(null);
+  
+  // Track selected customer instead of a single transaction
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  
   const [activeFilter, setActiveFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -109,29 +17,35 @@ function DashBoard() {
     async function fetchVelocityFlags() {
       setLoading(true);
       setError(null);
-      try{
+      try {
         const res = await fetch(`${API_BASE}/velocity`);
         if (!res.ok) throw new Error(`API returned ${res.status}`);
         const data = await res.json();
 
         const rawTransactions = Array.isArray(data) ? data : [];
 
-
-        // tyring to normalize data recommendation
+        // Normalize transactions
         const normalizedData = rawTransactions.map(tx => ({
           ...tx,
           anomalyType: tx.anomalyType || "Velocity",
           severity: tx.severity || (tx.velocity_count >= 10 ? "CRITICAL" : "HIGH"),
           status: tx.status || "Flagged",
-      }));
+        }));
 
-      if (!cancelled) {
-        setTransactions(normalizedData);
-        setSelectedTx(normalizedData[0] || null);}
+        if (!cancelled) {
+          setTransactions(normalizedData);
+          
+          // Auto-select the first customer's ID if available
+          if (normalizedData.length > 0) {
+            setSelectedCustomerId(normalizedData[0].customer_id);
+          }
+        }
       } catch (err) {
-        if (!cancelled) { setError(err.message); }
+        if (!cancelled) { 
+          setError(err.message); 
+        }
       } finally { 
-        if (!cancelled)  setLoading(false); 
+        if (!cancelled) setLoading(false); 
       }
     }
   
@@ -139,44 +53,65 @@ function DashBoard() {
     return () => { cancelled = true; };
   }, []);
 
+  // ==========================================
+  // HELPER: GROUP TRANSACTIONS BY CUSTOMER
+  // ==========================================
+  const groupTransactionsByCustomer = (txList) => {
+    const groups = {};
+    txList.forEach(tx => {
+      const cid = tx.customer_id;
+      if (!groups[cid]) {
+        groups[cid] = {
+          customer_id: cid,
+          customer_name: tx.customer_name,
+          transactions: [],
+          total_amount: 0,
+          highest_severity: "LOW",
+          status: "Suspicious" 
+        };
+      }
+      groups[cid].transactions.push(tx);
+      groups[cid].total_amount += tx.amount_kes || 0;
 
+      if (tx.status === "Flagged" || tx.status === "Investigating") {
+        groups[cid].status = "Flagged";
+      }
 
+      const severityWeights = { "LOW": 1, "WARNING": 2, "HIGH": 3, "CRITICAL": 4 };
+      const currentWeight = severityWeights[tx.severity] || 1;
+      const existingWeight = severityWeights[groups[cid].highest_severity] || 1;
+      if (currentWeight > existingWeight) {
+        groups[cid].highest_severity = tx.severity;
+      }
+    });
+    return Object.values(groups);
+  };
 
-  
+  const allCustomers = groupTransactionsByCustomer(transactions);
 
-  // queues based on current level of investigation
-  const flaggedQueue = transactions.filter(tx => tx.status === "Flagged" || tx.status === "Investigating");
-  const suspiciousWatchlist = transactions.filter(tx => tx.status === "Suspicious");
+  const flaggedQueue = allCustomers.filter(c => c.status === "Flagged");
+  const suspiciousWatchlist = allCustomers.filter(c => c.status === "Suspicious");
 
-  //category filter (Velocity, Repeated Withdrawals, Round Numbers) to the flagged queue
-  const filteredQueue = flaggedQueue.filter(tx => {
+  const filteredQueue = flaggedQueue.filter(customer => {
     if (activeFilter === "ALL") return true;
-    return tx.anomalyType === activeFilter;
+    return customer.transactions.some(tx => tx.anomalyType === activeFilter);
   });
 
-  // Action: suspicious item to the active Flagged Queue
-  const promoteToInvestigation = (txId) => {
+  const selectedCustomer = allCustomers.find(c => c.customer_id === selectedCustomerId) || null;
+
+  const promoteToInvestigation = (customerId) => {
     setTransactions(prev => prev.map(tx => {
-      if (tx.transaction_id === txId) {
-        const updated = { ...tx, status: "Flagged", severity: "HIGH" };
-        if (selectedTx?.transaction_id === txId) {
-          setSelectedTx(updated);
-        }
-        return updated;
+      if (tx.customer_id === customerId) {
+        return { ...tx, status: "Flagged", severity: "HIGH" };
       }
       return tx;
     }));
   };
 
-  // Action: Resolve/Dismiss a flagged item
-  const resolveIncident = (txId) => {
+  const resolveIncident = (customerId) => {
     setTransactions(prev => prev.map(tx => {
-      if (tx.transaction_id === txId) {
-        const updated = { ...tx, status: "Resolved" };
-        if (selectedTx?.transaction_id === txId) {
-          setSelectedTx(updated);
-        }
-        return updated;
+      if (tx.customer_id === customerId) {
+        return { ...tx, status: "Resolved" };
       }
       return tx;
     }));
@@ -184,7 +119,7 @@ function DashBoard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-400 flex items-center justify-center font-mono text-sm">
+      <div className="min-h-screen bg-[#121212] text-slate-400 flex items-center justify-center font-mono text-xs">
         Loading transaction feed...
       </div>
     );
@@ -192,30 +127,31 @@ function DashBoard() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-950 text-rose-400 flex items-center justify-center font-mono text-sm">
-        Failed to reach detection API: {error}
+      <div className="min-h-screen bg-[#121212] text-[#E74C3C] flex items-center justify-center font-mono text-xs">
+        Error: Failed to reach detection API: {error}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#121212] text-slate-300 flex flex-col font-sans text-xs">
       
-      {/* Header bar */}
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur px-6 py-4 flex justify-between items-center">
+      {/* Header Bar */}
+      <header className="border-b border-slate-800 bg-[#181818] px-6 py-4 flex justify-between items-center">
         <div>
-          <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse"></span>
+          <h1 className="text-base font-bold tracking-tight text-slate-100 uppercase">
             Mlinzi Analyst Triage Core
           </h1>
-          <p className="text-xs text-slate-400">CSV Monitoring & Threat Detection</p>
+          <p className="text-[11px] text-slate-400">Customer Risk Profiles & Threat Detection</p>
         </div>
-        <div className="flex gap-4 text-xs font-mono">
-          <div className="bg-slate-900 border border-slate-800 px-3 py-1.5 rounded">
-            ACTIVE ALERTS: <span className="text-rose-400 font-bold">{flaggedQueue.filter(t => t.status !== "Resolved").length}</span>
+        <div className="flex gap-4 font-mono">
+          <div className="bg-[#1e1e1e] border border-slate-800 px-3 py-1.5 rounded flex items-center gap-2 text-slate-200">
+            <span className="text-[#E74C3C] font-bold">ACTIVE ALERTS:</span> 
+            <span className="text-[#E74C3C] font-bold">{flaggedQueue.length}</span>
           </div>
-          <div className="bg-slate-900 border border-slate-800 px-3 py-1.5 rounded">
-            SUSPICIOUS WATCHLIST: <span className="text-amber-400 font-bold">{suspiciousWatchlist.length}</span>
+          <div className="bg-[#1e1e1e] border border-slate-800 px-3 py-1.5 rounded flex items-center gap-2 text-slate-200">
+            <span className="text-amber-500 font-bold">SUSPICIOUS:</span> 
+            <span className="text-amber-500 font-bold">{suspiciousWatchlist.length}</span>
           </div>
         </div>
       </header>
@@ -223,21 +159,21 @@ function DashBoard() {
       {/* Main Grid Workspace */}
       <main className="flex-1 grid grid-cols-1 xl:grid-cols-3 overflow-hidden divide-y xl:divide-y-0 xl:divide-x divide-slate-800">
         
-        {/* Pane 1: Investigation & Flags Queue */}
-        <section className="p-4 overflow-y-auto space-y-4 bg-slate-950">
+        {/* Pane 1: Investigation & Customer Flags Queue */}
+        <section className="p-4 overflow-y-auto space-y-4 bg-[#121212]">
           <div>
-            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3"> Flagged Queue ({filteredQueue.length})</h2>
+            <h2 className="font-bold text-slate-400 uppercase tracking-wider mb-3">Flagged Customers ({filteredQueue.length})</h2>
             
-            {/* Filter Pills based on rules */}
+            {/* Filter Pills */}
             <div className="flex flex-wrap gap-1 mb-4">
               {["ALL", "Velocity", "Repeated Withdrawals", "Round Number Anomaly"].map(filterVal => (
                 <button
                   key={filterVal}
                   onClick={() => setActiveFilter(filterVal)}
-                  className={`text-[10px] font-semibold px-2 py-1 rounded transition ${
+                  className={`text-[10px] font-semibold px-2.5 py-1 rounded transition uppercase ${
                     activeFilter === filterVal
-                      ? "bg-rose-600 text-white"
-                      : "bg-slate-900 text-slate-400 border border-slate-800 hover:border-slate-700"
+                      ? "bg-[#E74C3C] text-white"
+                      : "bg-[#1e1e1e] text-slate-400 border border-slate-800 hover:border-slate-700"
                   }`}
                 >
                   {filterVal === "ALL" ? "All Flags" : filterVal}
@@ -249,138 +185,159 @@ function DashBoard() {
           <div className="space-y-2">
             {filteredQueue.map(item => (
               <div
-                key={item.transaction_id}
-                onClick={() => setSelectedTx(item)}
-                className={`p-3.5 rounded-lg border transition-all cursor-pointer ${
-                  selectedTx?.transaction_id === item.transaction_id 
-                    ? 'bg-slate-900 border-rose-500 shadow-md shadow-rose-950/20' 
-                    : 'bg-slate-900/40 border-slate-900 hover:border-slate-800'
+                key={item.customer_id}
+                onClick={() => setSelectedCustomerId(item.customer_id)}
+                className={`p-3.5 rounded border transition-all cursor-pointer ${
+                  selectedCustomerId === item.customer_id 
+                    ? 'bg-[#181818] border-[#E74C3C] shadow-md shadow-rose-950/10' 
+                    : 'bg-[#181818]/40 border-slate-800/80 hover:border-slate-700'
                 }`}
               >
-                <div className="flex justify-between items-start text-xs font-mono mb-1.5">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                    item.severity === 'CRITICAL' ? 'bg-rose-950 text-rose-400' : 'bg-amber-950 text-amber-300'
+                <div className="flex justify-between items-start font-mono mb-1.5">
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                    item.highest_severity === 'CRITICAL' ? 'bg-red-950/40 text-[#E74C3C]' : 'bg-amber-950/40 text-amber-500'
                   }`}>
-                    {item.anomalyType}
+                    {item.highest_severity} RISK
                   </span>
-                  <span className="text-slate-500">{item.transaction_id}</span>
+                  <span className="text-slate-500 text-[10px]">{item.transactions.length} Transactions</span>
                 </div>
-                <h3 className="font-semibold text-sm text-slate-200">{item.customer_name}</h3>
-                <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-800/40 text-xs">
-                  <span className="text-slate-300 font-bold font-mono">KES {item.amount_kes.toLocaleString()}</span>
-                  <span className={`font-semibold ${item.status === 'Resolved' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    ● {item.status}
+                <h3 className="font-semibold text-slate-200">{item.customer_name}</h3>
+                <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-800/40">
+                  <span className="text-slate-300 font-bold font-mono">KES {item.total_amount.toLocaleString()}</span>
+                  <span className="font-semibold text-[#E74C3C] font-mono text-[10px] uppercase">
+                    STATUS: {item.status}
                   </span>
                 </div>
               </div>
             ))}
             {filteredQueue.length === 0 && (
-              <p className="text-xs text-slate-500 text-center py-8">No current incidents matching this rule.</p>
+              <p className="text-slate-500 text-center py-8">No customers matching this risk profile.</p>
             )}
           </div>
         </section>
 
-        {/* Suspicious Activity Watchlist */}
-        <section className="p-4 overflow-y-auto space-y-4 bg-slate-900/10">
+        {/* Pane 2: Suspicious Activity Watchlist */}
+        <section className="p-4 overflow-y-auto space-y-4 bg-[#121212]/40">
           <div>
-            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Suspicious Watchlist ({suspiciousWatchlist.length})</h2>
-            <p className="text-[11px] text-slate-500">Unflagged transactions holding moderate risk characteristics</p>
+            <h2 className="font-bold text-slate-400 uppercase tracking-wider mb-1">Suspicious Watchlist ({suspiciousWatchlist.length})</h2>
+            <p className="text-[11px] text-slate-500">Profiles holding moderate, unflagged anomalies</p>
           </div>
 
           <div className="space-y-2">
             {suspiciousWatchlist.map(item => (
               <div
-                key={item.transaction_id}
-                onClick={() => setSelectedTx(item)}
-                className={`p-3.5 rounded-lg border transition-all cursor-pointer group ${
-                  selectedTx?.transaction_id === item.transaction_id 
-                    ? 'bg-slate-900 border-amber-500' 
-                    : 'bg-slate-900/20 border-slate-900 hover:border-slate-800'
+                key={item.customer_id}
+                onClick={() => setSelectedCustomerId(item.customer_id)}
+                className={`p-3.5 rounded border transition-all cursor-pointer group ${
+                  selectedCustomerId === item.customer_id 
+                    ? 'bg-[#181818] border-amber-500' 
+                    : 'bg-[#181818]/20 border-slate-800/80 hover:border-slate-700'
                 }`}
               >
-                <div className="flex justify-between items-center text-xs font-mono mb-1.5">
-                  <span className="text-amber-400 font-semibold bg-amber-950/40 px-1.5 py-0.5 rounded text-[10px]">
-                    {item.anomalyType}
+                <div className="flex justify-between items-center font-mono mb-1.5">
+                  <span className="text-amber-400 font-semibold bg-amber-950/20 px-1.5 py-0.5 rounded text-[10px] uppercase">
+                    PENDING: {item.transactions.length} Actions
                   </span>
-                  <span className="text-slate-500">{item.transaction_id}</span>
+                  <span className="text-slate-500 text-[10px]">ID: {item.customer_id}</span>
                 </div>
-                <h3 className="font-medium text-sm text-slate-300">{item.customer_name}</h3>
-                <p className="text-xs text-slate-400 mt-1 line-clamp-1">{item.reason}</p>
+                <h3 className="font-medium text-slate-300">{item.customer_name}</h3>
                 
                 <div className="mt-3 pt-2 border-t border-slate-800/40 flex justify-between items-center">
-                  <span className="text-xs font-mono text-slate-300 font-bold">KES {item.amount_kes.toLocaleString()}</span>
+                  <span className="font-mono text-slate-300 font-bold">KES {item.total_amount.toLocaleString()}</span>
                   <button
                     onClick={(e) => {
                       e.stopPropagation(); 
-                      promoteToInvestigation(item.transaction_id);
+                      promoteToInvestigation(item.customer_id);
                     }}
-                    className="text-[10px] font-bold bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-950 transition-colors px-2 py-1 rounded border border-amber-500/20 group-hover:border-amber-500"
+                    className="text-[10px] font-bold bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-950 transition-colors px-2 py-1 rounded border border-amber-500/20 uppercase"
                   >
-                    Flag Incident
+                    Flag Profile
                   </button>
                 </div>
               </div>
             ))}
             {suspiciousWatchlist.length === 0 && (
-              <p className="text-xs text-slate-500 text-center py-8">All suspicious transactions have been triaged.</p>
+              <p className="text-slate-500 text-center py-8">All suspicious customer profiles have been triaged.</p>
             )}
           </div>
         </section>
 
-        {/*  Workspace / Detailed Inspector */}
-        <section className="p-6 bg-slate-900/30 flex flex-col justify-between">
-          {selectedTx ? (
+        {/* Pane 3: Workspace / Detailed Customer Inspector */}
+        <section className="p-6 bg-[#181818]/30 flex flex-col justify-between overflow-y-auto">
+          {selectedCustomer ? (
             <div className="space-y-6">
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-mono text-slate-500">TXID: {selectedTx.transaction_id}</span>
-                  <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono uppercase">
-                    {selectedTx.status}
+                  <span className="font-mono text-slate-500">ID: {selectedCustomer.customer_id}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono uppercase font-bold ${
+                    selectedCustomer.status === "Flagged" ? 'bg-red-950/40 text-[#E74C3C]' : 'bg-amber-950/40 text-amber-500'
+                  }`}>
+                    {selectedCustomer.status}
                   </span>
                 </div>
-                <h3 className="text-xl font-bold text-white">{selectedTx.customer_name}</h3>
-                <p className="text-xs text-slate-400 mt-1">Customer Identifier: <span className="text-cyan-400 font-mono">{selectedTx.customer_id}</span></p>
+                <h3 className="text-lg font-bold text-slate-100">{selectedCustomer.customer_name}</h3>
+                <p className="text-slate-400 mt-1">Aggregated Profile Value: <span className="text-cyan-400 font-mono font-bold">KES {selectedCustomer.total_amount.toLocaleString()}</span></p>
               </div>
 
-              {/* Data Manifest Object */}
-              <div className="bg-slate-950 p-4 rounded border border-slate-800 text-xs font-mono space-y-2.5">
-                <p className="text-slate-500 border-b border-slate-900 pb-1.5">// Transaction Attributes</p>
-                <div><span className="text-slate-400">Timestamp:</span> <span className="text-slate-200">{selectedTx.timestamp}</span></div>
-                <div><span className="text-slate-400">Amount:</span> <span className="text-emerald-400 font-bold">KES {selectedTx.amount_kes.toLocaleString()}</span></div>
-                <div><span className="text-slate-400">Transaction Type:</span> <span className="text-slate-200">{selectedTx.transaction_type}</span></div>
-                <div><span className="text-slate-400">Routing Channel:</span> <span className="text-cyan-400">{selectedTx.channel}</span></div>
-                <div className="pt-1.5 border-t border-slate-900">
-                  <span className="text-slate-400 block mb-1">Telemetry Reason:</span>
-                  <span className="text-slate-300 text-[11px] block leading-relaxed">{selectedTx.reason}</span>
+              {/* Dynamic Transaction Logs Container */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-slate-400 uppercase tracking-wider">// TRANSACTION MANIFEST ({selectedCustomer.transactions.length})</h4>
+                
+                <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
+                  {selectedCustomer.transactions.map((tx) => {
+                    const isResolved = tx.status === "Resolved";
+                    const isFlagged = tx.status === "Flagged";
+                    return (
+                      <div key={tx.transaction_id} className="bg-[#121212] p-4 rounded border border-slate-800 font-mono space-y-2">
+                        <div className="flex justify-between items-center border-b border-slate-800/60 pb-1.5">
+                          <span className="text-cyan-400 text-[10px]">TXID: {tx.transaction_id}</span>
+                          <span className="text-slate-500 text-[10px]">{tx.timestamp}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <div><span className="text-slate-500">Amount:</span> <span className="text-[#2ECC71] font-bold">KES {tx.amount_kes.toLocaleString()}</span></div>
+                          <span className={`text-[10px] font-bold uppercase ${isResolved ? 'text-[#2ECC71]' : isFlagged ? 'text-[#E74C3C]' : 'text-amber-500'}`}>
+                            {tx.status}
+                          </span>
+                        </div>
+                        <div><span className="text-slate-500">Type:</span> <span className="text-slate-300">{tx.transaction_type} ({tx.channel})</span></div>
+                        <div>
+                          <span className="text-slate-500">Telemetry Reason:</span>
+                          <span className="text-slate-300 block text-[11px] mt-1 leading-relaxed bg-[#181818] p-1.5 rounded border border-slate-800/60">
+                            {tx.reason}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Dynamic Actions based on current status */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Triage Procedures</h4>
+              {/* Dynamic Profile Actions */}
+              <div className="space-y-3 pt-4 border-t border-slate-800">
+                <h4 className="font-semibold text-slate-400 uppercase tracking-wider">Bulk Triage Actions</h4>
                 
-                {selectedTx.status === "Suspicious" ? (
-                  <div className="bg-amber-950/20 border border-amber-800/40 p-3 rounded text-xs text-amber-300 space-y-2">
-                    <p>This transaction is currently passively watched. Escalating pushes it directly into the active Flagged Queue.</p>
+                {selectedCustomer.status === "Suspicious" ? (
+                  <div className="bg-amber-950/20 border border-amber-800/40 p-3 rounded text-amber-300 space-y-2">
+                    <p>This profile is unflagged. Escalating will move all nested transactions into the Active Flagged Queue.</p>
                     <button
-                      onClick={() => promoteToInvestigation(selectedTx.transaction_id)}
-                      className="w-full bg-amber-500 text-slate-950 font-bold py-2 rounded text-center text-xs hover:bg-amber-400 transition"
+                      onClick={() => promoteToInvestigation(selectedCustomer.customer_id)}
+                      className="w-full bg-amber-500 text-slate-950 font-bold py-2 rounded text-center hover:bg-amber-400 transition uppercase"
                     >
-                      Promote to Active Flagged Queue
+                      Promote Customer Profile
                     </button>
                   </div>
                 ) : (
                   <div className="flex gap-2">
                     <button
-                      onClick={() => resolveIncident(selectedTx.transaction_id)}
-                      disabled={selectedTx.status === "Resolved"}
-                      className="flex-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 transition py-2.5 rounded text-white"
+                      onClick={() => resolveIncident(selectedCustomer.customer_id)}
+                      disabled={selectedCustomer.transactions.every(tx => tx.status === "Resolved")}
+                      className="flex-1 font-bold bg-[#2ECC71] hover:bg-green-400 disabled:bg-slate-800 disabled:text-slate-500 transition py-2.5 rounded text-slate-950 uppercase"
                     >
-                      {selectedTx.status === "Resolved" ? "✓ Incident Resolved" : "Approve & Resolve Ledger"}
+                      {selectedCustomer.transactions.every(tx => tx.status === "Resolved") ? "Profile Resolved" : "Resolve All Incidents"}
                     </button>
                     <button 
-                      disabled={selectedTx.status === "Resolved"}
-                      className="text-xs font-bold bg-rose-600/10 border border-rose-500/20 hover:bg-rose-600 text-rose-400 hover:text-white disabled:opacity-40 transition px-4 py-2.5 rounded"
+                      disabled={selectedCustomer.transactions.every(tx => tx.status === "Resolved")}
+                      className="font-bold bg-[#E74C3C]/10 border border-[#E74C3C]/20 hover:bg-[#E74C3C] text-[#E74C3C] hover:text-white disabled:opacity-40 transition px-4 py-2.5 rounded uppercase"
                     >
                       Freeze Account
                     </button>
@@ -389,8 +346,8 @@ function DashBoard() {
               </div>
             </div>
           ) : (
-            <div className="text-center text-slate-600 font-mono my-auto text-xs">
-              [Select a transaction log to load details]
+            <div className="text-center text-slate-600 font-mono my-auto">
+              [Select a customer profile to load transaction logs]
             </div>
           )}
         </section>
