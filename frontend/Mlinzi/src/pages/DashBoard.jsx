@@ -1,104 +1,148 @@
-import React, { useState } from 'react';
 
-// mock transaction dataset mapped with specific anomaly triggers
-const initialTransactions = [
-  {
-    transaction_id: "TXN1016",
-    customer_id: "CUST014",
-    customer_name: "Michael Onyango",
-    timestamp: "2026-07-01 08:14",
-    amount_kes: 1200,
-    transaction_type: "Deposit",
-    channel: "ATM",
-    anomalyType: "Round Number Anomaly",
-    severity: "LOW",
-    reason: "Even hundred metric matching static automated test deposits.",
-    status: "Suspicious"
-  },
-  {
-    transaction_id: "TXN1008",
-    customer_id: "CUST009",
-    customer_name: "Mercy Wambui",
-    timestamp: "2026-07-01 08:46",
-    amount_kes: 12000,
-    transaction_type: "Transfer",
-    channel: "Mobile",
-    anomalyType: "Velocity",
-    severity: "CRITICAL",
-    reason: "High-value transfer followed instantly by secondary routing attempts.",
-    status: "Flagged"
-  },
-  {
-    transaction_id: "TXN1007",
-    customer_id: "CUST009",
-    customer_name: "Mercy Wambui",
-    timestamp: "2026-07-01 09:22",
-    amount_kes: 2300,
-    transaction_type: "Transfer",
-    channel: "Agent",
-    anomalyType: "Velocity",
-    severity: "HIGH",
-    reason: "Secondary transfer execution within the same hour block.",
-    status: "Flagged"
-  },
-  {
-    transaction_id: "TXN1011",
-    customer_id: "CUST011",
-    customer_name: "Ruth Nyambura",
-    timestamp: "2026-07-01 09:54",
-    amount_kes: 15600,
-    transaction_type: "Withdrawal",
-    channel: "ATM",
-    anomalyType: "Repeated Withdrawals",
-    severity: "WARNING",
-    reason: "Uncharacteristic ATM cash-out pattern relative to user historical limits.",
-    status: "Flagged"
-  },
-  {
-    transaction_id: "TXN1006",
-    customer_id: "CUST008",
-    customer_name: "John Kariuki",
-    timestamp: "2026-07-01 10:13",
-    amount_kes: 2300,
-    transaction_type: "Withdrawal",
-    channel: "Mobile",
-    anomalyType: "Repeated Withdrawals",
-    severity: "WARNING",
-    reason: "Consecutive mobile withdrawal requests within minutes.",
-    status: "Suspicious"
-  },
-  {
-    transaction_id: "TXN1005",
-    customer_id: "CUST008",
-    customer_name: "John Kariuki",
-    timestamp: "2026-07-01 10:44",
-    amount_kes: 5400,
-    transaction_type: "Deposit",
-    channel: "Agent",
-    anomalyType: "Round Number Anomaly",
-    severity: "LOW",
-    reason: "Rapid cash turnaround pattern - ATM extraction recycled back as Agent Deposit.",
-    status: "Suspicious"
-  },
-  {
-    transaction_id: "TXN1001",
-    customer_id: "CUST003",
-    customer_name: "Grace Njoki",
-    timestamp: "2026-07-01 11:14",
-    amount_kes: 750,
-    transaction_type: "Transfer",
-    channel: "Mobile",
-    anomalyType: "Velocity",
-    severity: "LOW",
-    reason: "Micro-transfer clearing validation.",
-    status: "Suspicious"
-  }
-];
+// // mock transaction dataset mapped with specific anomaly triggers
+// const initialTransactions = [
+//   {
+//     transaction_id: "TXN1016",
+//     customer_id: "CUST014",
+//     customer_name: "Michael Onyango",
+//     timestamp: "2026-07-01 08:14",
+//     amount_kes: 1200,
+//     transaction_type: "Deposit",
+//     channel: "ATM",
+//     anomalyType: "Round Number Anomaly",
+//     severity: "LOW",
+//     reason: "Even hundred metric matching static automated test deposits.",
+//     status: "Suspicious"
+//   },
+//   {
+//     transaction_id: "TXN1008",
+//     customer_id: "CUST009",
+//     customer_name: "Mercy Wambui",
+//     timestamp: "2026-07-01 08:46",
+//     amount_kes: 12000,
+//     transaction_type: "Transfer",
+//     channel: "Mobile",
+//     anomalyType: "Velocity",
+//     severity: "CRITICAL",
+//     reason: "High-value transfer followed instantly by secondary routing attempts.",
+//     status: "Flagged"
+//   },
+//   {
+//     transaction_id: "TXN1007",
+//     customer_id: "CUST009",
+//     customer_name: "Mercy Wambui",
+//     timestamp: "2026-07-01 09:22",
+//     amount_kes: 2300,
+//     transaction_type: "Transfer",
+//     channel: "Agent",
+//     anomalyType: "Velocity",
+//     severity: "HIGH",
+//     reason: "Secondary transfer execution within the same hour block.",
+//     status: "Flagged"
+//   },
+//   {
+//     transaction_id: "TXN1011",
+//     customer_id: "CUST011",
+//     customer_name: "Ruth Nyambura",
+//     timestamp: "2026-07-01 09:54",
+//     amount_kes: 15600,
+//     transaction_type: "Withdrawal",
+//     channel: "ATM",
+//     anomalyType: "Repeated Withdrawals",
+//     severity: "WARNING",
+//     reason: "Uncharacteristic ATM cash-out pattern relative to user historical limits.",
+//     status: "Flagged"
+//   },
+//   {
+//     transaction_id: "TXN1006",
+//     customer_id: "CUST008",
+//     customer_name: "John Kariuki",
+//     timestamp: "2026-07-01 10:13",
+//     amount_kes: 2300,
+//     transaction_type: "Withdrawal",
+//     channel: "Mobile",
+//     anomalyType: "Repeated Withdrawals",
+//     severity: "WARNING",
+//     reason: "Consecutive mobile withdrawal requests within minutes.",
+//     status: "Suspicious"
+//   },
+//   {
+//     transaction_id: "TXN1005",
+//     customer_id: "CUST008",
+//     customer_name: "John Kariuki",
+//     timestamp: "2026-07-01 10:44",
+//     amount_kes: 5400,
+//     transaction_type: "Deposit",
+//     channel: "Agent",
+//     anomalyType: "Round Number Anomaly",
+//     severity: "LOW",
+//     reason: "Rapid cash turnaround pattern - ATM extraction recycled back as Agent Deposit.",
+//     status: "Suspicious"
+//   },
+//   {
+//     transaction_id: "TXN1001",
+//     customer_id: "CUST003",
+//     customer_name: "Grace Njoki",
+//     timestamp: "2026-07-01 11:14",
+//     amount_kes: 750,
+//     transaction_type: "Transfer",
+//     channel: "Mobile",
+//     anomalyType: "Velocity",
+//     severity: "LOW",
+//     reason: "Micro-transfer clearing validation.",
+//     status: "Suspicious"
+//   }
+// ];
+import React, { useState , useEffect } from 'react';
+
+const API_BASE =  "http://127.0.0.1:8000"
 
 function DashBoard() {
-  const [transactions, setTransactions] = useState(initialTransactions);
-  const [selectedTx, setSelectedTx] = useState(initialTransactions[1]); // Default to first flagged item
+  const [transactions, setTransactions] = useState([]);
+  const [selectedTx, setSelectedTx] = useState(null);
   const [activeFilter, setActiveFilter] = useState("ALL");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchVelocityFlags() {
+      setLoading(true);
+      setError(null);
+      try{
+        const res = await fetch(`${API_BASE}/velocity`);
+        if (!res.ok) throw new Error(`API returned ${res.status}`);
+        const data = await res.json();
+
+        const rawTransactions = Array.isArray(data) ? data : [];
+
+
+        // tyring to normalize data recommendation
+        const normalizedData = rawTransactions.map(tx => ({
+          ...tx,
+          anomalyType: tx.anomalyType || "Velocity",
+          severity: tx.severity || (tx.velocity_count >= 10 ? "CRITICAL" : "HIGH"),
+          status: tx.status || "Flagged",
+      }));
+
+      if (!cancelled) {
+        setTransactions(normalizedData);
+        setSelectedTx(normalizedData[0] || null);}
+      } catch (err) {
+        if (!cancelled) { setError(err.message); }
+      } finally { 
+        if (!cancelled)  setLoading(false); 
+      }
+    }
+  
+    fetchVelocityFlags();
+    return () => { cancelled = true; };
+  }, []);
+
+
+
+
+  
 
   // queues based on current level of investigation
   const flaggedQueue = transactions.filter(tx => tx.status === "Flagged" || tx.status === "Investigating");
@@ -137,6 +181,22 @@ function DashBoard() {
       return tx;
     }));
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-400 flex items-center justify-center font-mono text-sm">
+        Loading transaction feed...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-rose-400 flex items-center justify-center font-mono text-sm">
+        Failed to reach detection API: {error}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
