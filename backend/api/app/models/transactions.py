@@ -15,7 +15,7 @@ class TransactionBase(SQLModel):
     is_flagged: bool = Field(default=True)
     flag: Optional[str] = None
     reason: Optional[str] = None
-    severity: Optional[str] = None
+    date_flagged: datetime = Field(sa_type=DateTime(timezone=True), nullable=False)
 
 
 class Transaction(TransactionBase, table=True):
