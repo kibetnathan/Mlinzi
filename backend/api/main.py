@@ -7,7 +7,8 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BACKEND_DIR))
 
 
-from velocity_detection.velocity import load_transactions, detect_velocity
+from velocity_detection import velocity
+from repeated_withdrawal import repeated
 
 app = FastAPI(
     title="Mlinzi Fraud Detection API",
@@ -22,6 +23,12 @@ def home():
 
 @app.get("/velocity")
 def velocity_detection():
-    transactions = load_transactions()
-    flagged = detect_velocity(transactions)
+    transactions = velocity.load_transactions()
+    flagged = velocity.detect_velocity(transactions)
+    return flagged
+
+@app.get("/repeated_withdrawals")
+def repeated_withdrawals_detection():
+    transactions = repeated.load_transactions()
+    flagged = repeated.detect_repeated_withdrawals(transactions)
     return flagged
