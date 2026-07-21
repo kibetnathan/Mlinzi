@@ -34,7 +34,13 @@ def home():
 
 @app.get("/velocity")
 def velocity_detection():
-    transactions = load_transactions()
-    flagged = detect_velocity(transactions)
+    transactions = velocity.load_transactions()
+    flagged = velocity.detect_velocity(transactions)
+    return flagged
+
+@app.get("/repeated_withdrawals")
+def repeated_withdrawals_detection():
+    transactions = repeated.load_transactions()
+    flagged = repeated.detect_repeated_withdrawals(transactions)
     return flagged
 
