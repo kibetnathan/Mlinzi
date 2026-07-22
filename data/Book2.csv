@@ -1,0 +1,15 @@
+transaction_id,customer_id,customer_name,timestamp,amount_kes,transaction_type,channel
+TXN1016,CUST01,Roy,01/07/2026 10:00,1200,Deposit,ATM
+TXN1008,CUST01,Roy,01/07/2026 10:15,1100,Transfer,Mobile
+TXN1007,CUST01,Roy,01/07/2026 10:20,1400,Transfer,Agent
+TXN1011,CUST01,Roy,01/07/2026 10:25,1560,Withdrawal,ATM
+TXN1006,CUST01,Roy,01/07/2026 10:40,1990,Withdrawal,Mobile
+TXN1005,CUST01,Roy,01/07/2026 10:44,5400,Deposit,Agent
+TXN1001,CUST02,Abel,01/07/2026 11:14,8000,Transfer,Mobile
+TXN1004,CUST02,Abel,01/07/2026 11:28,8900,Deposit,Mobile
+TXN1003,CUST02,Abel,01/07/2026 11:32,8700,Withdrawal,Branch
+TXN1013,CUST02,Abel,01/07/2026 11:42,8500,Transfer,Mobile
+TXN1017,CUST02,Abel,01/07/2026 12:04,8100,Transfer,Agent
+TXN1012,CUST02,Abel,01/07/2026 12:29,2300,Withdrawal,Agent
+TXN1009,CUST03,Wambui,01/07/2026 14:05,34500,Deposit,Agent
+TXN1015,CUST03,Wambui,01/07/2026 15:24,8900,Transfer,Branch
