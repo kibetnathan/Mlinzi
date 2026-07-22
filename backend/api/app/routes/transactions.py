@@ -9,7 +9,7 @@ router = APIRouter(prefix="/transactions/", tags=["Transactions"])
 
 
 @router.get("/flagged", response_model=List[Transaction])
-def velocity_detection(
+def flagged_transaction(
     flag: Optional[str] = None,
     target_date: date = Depends(date.today()),
     db: Session = Depends(get_db),
