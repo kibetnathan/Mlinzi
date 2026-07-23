@@ -12,53 +12,77 @@ function DashBoard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function fetchVelocityFlags() {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`${API_BASE}/velocity`);
-        if (!res.ok) throw new Error(`API returned ${res.status}`);
-        const data = await res.json();
 
-        const rawTransactions = Array.isArray(data) ? data : [];
+useEffect(() => {
+  let cancelled = false;
 
-        // Normalize transactions
-        const normalizedData = rawTransactions.map((tx) => ({
-          ...tx,
-          anomalyType: tx.anomalyType || "Velocity",
-          severity:
-            tx.severity || (tx.velocity_count >= 10 ? "CRITICAL" : "HIGH"),
-          status: tx.status || "Flagged",
-        }));
+  async function fetchAllAnomalies() {
+    setLoading(true);
+    setError(null);
+    try {
+      // Fetch both endpoints simultaneously
+      const [velocityRes, repeatedRes] = await Promise.all([
+        fetch(`${API_BASE}/velocity`),
+        fetch(`${API_BASE}/repeated_withdrawals`),
+      ]);
 
-        if (!cancelled) {
-          setTransactions(normalizedData);
+      if (!velocityRes.ok) throw new Error(`Velocity API: ${velocityRes.status}`);
+      if (!repeatedRes.ok) throw new Error(`Repeated API: ${repeatedRes.status}`);
 
-          // Auto-select the first customer's ID if available
-          if (normalizedData.length > 0) {
-            setSelectedCustomerId(normalizedData[0].customer_id);
-          }
+      const velocityData = await velocityRes.json();
+      const repeatedData = await repeatedRes.json();
+
+      // Normalize Velocity
+      const normVelocity = (Array.isArray(velocityData) ? velocityData : []).map(tx => ({
+        ...tx,
+        anomalyType: tx.anomalyType || "Velocity",
+        severity: tx.severity || (tx.velocity_count >= 10 ? "CRITICAL" : "HIGH"),
+        status: tx.status || "Flagged",
+      }));
+
+      // Normalize Repeated Withdrawals
+      const normRepeated = (Array.isArray(repeatedData) ? repeatedData : []).map(tx => ({
+        ...tx,
+        anomalyType: tx.anomalyType || "Repeated Withdrawals",
+        severity: tx.severity || "HIGH",
+        status: tx.status || "Flagged",
+      }));
+
+      // Deduplicate transactions if a single transaction triggers multiple rules
+      const combinedMap = new Map();
+      [...normVelocity, ...normRepeated].forEach(tx => {
+        if (!combinedMap.has(tx.transaction_id)) {
+          combinedMap.set(tx.transaction_id, tx);
+        } else {
+          // If transaction already exists, combine reasons/flags
+          const existing = combinedMap.get(tx.transaction_id);
+          existing.reason += ` | ${tx.reason}`;
         }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err.message);
+      });
+
+      const mergedData = Array.from(combinedMap.values());
+
+      if (!cancelled) {
+        setTransactions(mergedData);
+        if (mergedData.length > 0) {
+          setSelectedCustomerId(mergedData[0].customer_id);
         }
-      } finally {
-        if (!cancelled) setLoading(false);
       }
+    } catch (err) {
+      if (!cancelled) setError(err.message);
+    } finally {
+      if (!cancelled) setLoading(false);
     }
+  }
 
-    fetchVelocityFlags();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  fetchAllAnomalies();
+  return () => {
+    cancelled = true;
+  };
+}, []);
 
-  // ==========================================
-  // HELPER: GROUP TRANSACTIONS BY CUSTOMER
-  // ==========================================
+  
+    // GROUP TRANSACTIONS BY CUSTOMER
   const groupTransactionsByCustomer = (txList) => {
     const groups = {};
     txList.forEach((tx) => {
@@ -231,6 +255,18 @@ function DashBoard() {
                 <h3 className="font-semibold text-slate-200">
                   {item.customer_name}
                 </h3>
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {Array.from(new Set(item.transactions.map((t) => t.anomalyType))).map(
+                    (type) => (
+                      <span
+                        key={type}
+                        className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-400 font-mono uppercase"
+                      >
+                        {type}
+                      </span>
+                    )
+                  )}
+                </div>
                 <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-800/40">
                   <span className="text-slate-300 font-bold font-mono">
                     KES {item.total_amount.toLocaleString()}
