@@ -89,13 +89,13 @@ def detect_repeated_withdrawals(transactions: list[dict]) -> list[dict]:
                                 bucket_transaction[0]['amount_kes']:,} × "
                             f"{len(bucket_transaction)} in {TIME_WINDOW_HOURS}h"
                         )
-                    flagged_transaction["flag"] = "repeated"
-                    flagged_transaction["date_flagged"] = pandas.Timestamp.now(
-                        tz="UTC"
-                    ).isoformat()
+                        flagged_transaction["flag"] = "repeated"
+                        flagged_transaction["date_flagged"] = pandas.Timestamp.now(
+                            tz="UTC"
+                        ).isoformat()
 
-                    flagged_transactions.append(flagged_transaction)
-        return flagged_transactions
+                        flagged_transactions.append(flagged_transaction)
+    return flagged_transactions
 
 
 if __name__ == "__main__":

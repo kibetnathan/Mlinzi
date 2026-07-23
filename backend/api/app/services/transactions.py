@@ -1,4 +1,3 @@
-import os
 import sys
 from pathlib import Path
 from sqlmodel import Session, select
@@ -45,8 +44,14 @@ def get_flagged_transactions(
 
 
 def _populate_from_csv(db: Session) -> None:
-    from velocity_detection.velocity import load_transactions as load_velocity, detect_velocity
-    from repeated_withdrawal.repeated import load_transactions as load_repeated, detect_repeated_withdrawals
+    from velocity_detection.velocity import (
+        load_transactions as load_velocity,
+        detect_velocity,
+    )
+    from repeated_withdrawal.repeated import (
+        load_transactions as load_repeated,
+        detect_repeated_withdrawals,
+    )
 
     velocity_txns = detect_velocity(load_velocity())
     repeated_txns = detect_repeated_withdrawals(load_repeated())
@@ -58,11 +63,24 @@ def _populate_from_csv(db: Session) -> None:
         if txn["transaction_id"] in all_flagged:
             existing = all_flagged[txn["transaction_id"]]
             existing["flag"] = "velocity,repeated"
-            existing["reason"] = existing.get("reason", "") + "; " + txn.get("reason", "")
+            existing["reason"] = (
+                existing.get("reason", "") + "; " + txn.get("reason", "")
+            )
         else:
             all_flagged[txn["transaction_id"]] = txn
 
+    existing_ids = set(
+        db.exec(
+            select(Transaction.transaction_id).where(
+                Transaction.transaction_id.in_(list(all_flagged.keys()))
+            )
+        ).all()
+    )
+
     for txn_id, txn_data in all_flagged.items():
+        if txn_id in existing_ids:
+            continue
+
         timestamp = txn_data.get("timestamp")
         if isinstance(timestamp, str):
             timestamp = datetime.fromisoformat(timestamp)
