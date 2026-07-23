@@ -1,3 +1,4 @@
+from sorting.sorter import Adapter
 import pandas
 from pathlib import Path
 import sys
@@ -7,14 +8,11 @@ from datetime import timedelta
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BACKEND_DIR))
-
 DATA_FILE = BACKEND_DIR.parent / "data" / "mlinzi_sample_transactions.csv"
-
-from sorting.sorter import Adapter
-
 
 WITHDRAWAL_COUNT_THRESHOLD = 5
 TIME_WINDOW_HOURS = 2
+AMOUNT_TOLERANCE = 1000
 
 
 def load_transactions() -> list[dict]:
@@ -29,9 +27,7 @@ def load_transactions() -> list[dict]:
 
     df["timestamp"] = pandas.to_datetime(df["timestamp"])
 
-    withdrawals = df[
-        df["transaction_type"] == "Withdrawal"
-    ]
+    withdrawals = df[df["transaction_type"] == "Withdrawal"]
 
     return withdrawals.to_dict("records")
 
@@ -180,64 +176,41 @@ def detect_repeated_withdrawals(
                 window_start_index : window_end_index + 1
             ]
 
-            similar_transactions = []
+            amount_buckets = defaultdict(list)
 
-            # Compare the current transaction against
-            # transactions inside the current time window.
             for transaction in current_window:
+                amount = transaction["amount_kes"]
 
-                if amounts_are_similar(
-                    first_amount=current_transaction[
-                        "amount_kes"
-                    ],
-                    second_amount=transaction[
-                        "amount_kes"
-                    ],
-                    tolerance_type=tolerance_type,
-                    tolerance_value=tolerance_value,
-                ):
-                    similar_transactions.append(
-                        transaction
-                    )
+                amount_bucket = amount // AMOUNT_TOLERANCE
 
-            # Flag the group if enough similar withdrawals
-            # exist within the time window.
-            if (
-                len(similar_transactions)
-                >= WITHDRAWAL_COUNT_THRESHOLD
-            ):
+                amount_buckets[amount_bucket].append(transaction)
 
-                for transaction in similar_transactions:
+            for amount_bucket, bucket_transaction in amount_buckets.items():
+                if len(bucket_transaction) >= WITHDRAWAL_COUNT_THRESHOLD:
+                    for flagged_transaction in bucket_transaction:
+                        transaction_id = flagged_transaction["transaction_id"]
 
-                    transaction_id = transaction[
-                        "transaction_id"
-                    ]
+                        if transaction_id in flagged_transaction_ids:
+                            continue
 
-                    # Prevent the same transaction from
-                    # being returned multiple times.
-                    if (
-                        transaction_id
-                        in flagged_transaction_ids
-                    ):
-                        continue
+                        flagged_transaction_ids.add(transaction_id)
 
-                    flagged_transaction_ids.add(
-                        transaction_id
-                    )
+                        flagged_transaction["anomalyType"] = "Repeated Withdrawals"
+                        flagged_transaction["severity"] = (
+                            "HIGH" if len(bucket_transaction) < 8 else "CRITICAL"
+                        )
+                        flagged_transaction["status"] = "Flagged"
+                        flagged_transaction["reason"] = (
+                            f"Repeated withdrawal: KES {
+                                bucket_transaction[0]['amount_kes']:,} × "
+                            f"{len(bucket_transaction)} in {TIME_WINDOW_HOURS}h"
+                        )
+                        flagged_transaction["flag"] = "repeated"
+                        flagged_transaction["date_flagged"] = pandas.Timestamp.now(
+                            tz="UTC"
+                        ).isoformat()
 
-                    transaction["reason"] = (
-                        f"Repeated withdrawals: "
-                        f"{len(similar_transactions)} "
-                        f"withdrawals of similar amount "
-                        f"within {TIME_WINDOW_HOURS} hours "
-                        f"using {tolerance_type} tolerance "
-                        f"of {tolerance_value}"
-                    )
-
-                    flagged_transactions.append(
-                        transaction
-                    )
-
+                        flagged_transactions.append(flagged_transaction)
     return flagged_transactions
 
 
