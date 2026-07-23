@@ -85,15 +85,16 @@ def detect_repeated_withdrawals(transactions: list[dict]) -> list[dict]:
 
                         flagged_transaction_ids.add(transaction_id)
                         
+                        flagged_transaction['anomalyType'] = "Repeated Withdrawals"
+                        flagged_transaction['severity'] = "HIGH" if len(bucket_transaction) < 8 else "CRITICAL"
+                        flagged_transaction['status'] = "Flagged"
                         flagged_transaction['reason'] = (
-                            f"Repeated withdrawals: "
-                            f"{len(bucket_transaction)} "
-                            f"withdrawals of the similar amount "
-                            f"within {TIME_WINDOW_HOURS} hours"
-                        )
+                            f"Repeated withdrawal: KES {bucket_transaction[0]['amount_kes']:,} × "
+                            f"{len(bucket_transaction)} in {TIME_WINDOW_HOURS}h"
+                        )   
                         
                         flagged_transactions.append(flagged_transaction)
-    return flagged_transactions
+        return flagged_transactions
 if __name__ == "__main__":
     transactions = load_transactions()
 
