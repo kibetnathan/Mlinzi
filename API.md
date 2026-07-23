@@ -1,6 +1,9 @@
-Overview
+# Overview
 A FastAPI application called "Mlinzi Fraud Detection" that serves flagged fraud transactions from a PostgreSQL database. It uses SQLModel (Pydantic + SQLAlchemy) for ORM/models and Alembic for migrations.
-Architecture
+
+## Architecture
+
+```
 backend/api/app/
 ├── main.py                          # Entry point, creates the app
 ├── application/app.py               # App factory (FastAPI instance)
@@ -13,7 +16,8 @@ backend/api/app/
 │   └── user.py                      # User endpoints (stub)
 └── services/
     └── transactions.py              # Business logic for querying/ingesting flagged txns
-Features
+```
+# Features
 1. Transaction Flagging API
 Two endpoints under /transactions:
 - GET /transactions/flagged — Returns all flagged transactions for a given date, optionally filtered by ?flag=velocity or ?flag=repeated. Defaults to today's date.
@@ -30,18 +34,18 @@ models/user.py defines a User table with id (UUID), username, email, display_nam
 - Alembic migrations with 6 versions tracking schema evolution (create tables → add is_flagged/flags → add reason/severity → remove severity)
 - DB URL from DATABASE_URL env var, defaults to localhost:5432
 How to Use
-# Start the DB
+### Start the DB
 cd backend/api && docker-compose up -d
 
-# Run the API (with uvicorn)
+### Run the API (with uvicorn)
 uvicorn app.main:app --reload --app-dir backend/api
 
-# Query flagged transactions for today
+### Query flagged transactions for today
 curl http://localhost:8000/transactions/flagged
 
-# Query velocity-flagged transactions for a specific date
+### Query velocity-flagged transactions for a specific date
 curl "http://localhost:8000/transactions/flagged?flag=velocity&target_date=2025-07-20"
 
-# Or via path param
+### Or via path param
 curl http://localhost:8000/transactions/flagged/repeated
 The first request auto-seeds the DB from the CSV if empty, so no manual migration seed step is needed.
