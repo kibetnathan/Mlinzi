@@ -1,4 +1,4 @@
-from velocity_detection.velocity import load_transactions, detect_velocity
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
@@ -42,8 +42,17 @@ def velocity_detection():
     return flagged
 
 @app.get("/repeated_withdrawals")
-def repeated_withdrawals_detection():
+def repeated_withdrawals_detection(
+    tolerance_type: str = "fixed",
+    tolerance_value: float = 1000,
+):
     transactions = repeated.load_transactions()
-    flagged = repeated.detect_repeated_withdrawals(transactions)
+
+    flagged = repeated.detect_repeated_withdrawals(
+        transactions=transactions,
+        tolerance_type=tolerance_type,
+        tolerance_value=tolerance_value,
+    )
+
     return flagged
 
