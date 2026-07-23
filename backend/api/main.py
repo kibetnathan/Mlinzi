@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 import sys
+from fastapi.middleware.cors import CORSMiddleware
 
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -29,6 +30,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def home():
