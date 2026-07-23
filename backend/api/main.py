@@ -15,6 +15,9 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
 ]
 
+from velocity_detection import velocity
+from repeated_withdrawal import repeated
+
 app = FastAPI(
     title="Mlinzi Fraud Detection API",
     version="1.0.0",
@@ -48,8 +51,17 @@ def velocity_detection():
     return flagged
 
 @app.get("/repeated_withdrawals")
-def repeated_withdrawals_detection():
+def repeated_withdrawals_detection(
+    tolerance_type: str = "fixed",
+    tolerance_value: float = 1000,
+):
     transactions = repeated.load_transactions()
-    flagged = repeated.detect_repeated_withdrawals(transactions)
+
+    flagged = repeated.detect_repeated_withdrawals(
+        transactions=transactions,
+        tolerance_type=tolerance_type,
+        tolerance_value=tolerance_value,
+    )
+
     return flagged
 
