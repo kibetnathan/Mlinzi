@@ -6,13 +6,13 @@ from ..database import get_db
 from ..services.transactions import get_flagged_transactions
 from datetime import date
 
-router = APIRouter(prefix="/transactions/", tags=["Transactions"])
+router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
 
 @router.get("/flagged", response_model=List[Transaction])
 def flagged_transaction(
     flag: Optional[str] = None,
-    target_date: date = Depends(date.today()),
+    target_date: Optional[date] = None,
     db: Session = Depends(get_db),
 ):
-    return get_flagged_transactions(db, target_date, flag)
+    return get_flagged_transactions(db, target_date or date.today(), flag)

@@ -12,6 +12,7 @@ from app.database import DATABASE_URL
 
 # Models import
 from app.models.user import User
+from app.models.transactions import Transaction
 
 
 # this is the Alembic Config object, which provides
