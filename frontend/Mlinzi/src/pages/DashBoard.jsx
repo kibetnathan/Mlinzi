@@ -1,100 +1,79 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from 'react';
 
-const API_BASE = import.meta.env.VITE_BASE_URL;
+// Use import.meta.env for Vite configuration
+const API_BASE = import.meta.env.VITE_URL || "http://127.0.0.1:8000";
 
 function DashBoard() {
   const [transactions, setTransactions] = useState([]);
-
-  // Track selected customer instead of a single transaction
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
-
   const [activeFilter, setActiveFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  useEffect(() => {
+    let cancelled = false;
 
-useEffect(() => {
-  let cancelled = false;
+    async function fetchDatabaseAnomalies() {
+      setLoading(true);
+      setError(null);
+      try {
+        const endpoint = activeFilter === "ALL" 
+          ? `${API_BASE}/transactions/flagged` 
+          : `${API_BASE}/transactions/flagged?flag=${encodeURIComponent(activeFilter.toLowerCase().replace(/ /g, '_'))}`;
 
-  async function fetchAllAnomalies() {
-    setLoading(true);
-    setError(null);
-    try {
-      // Fetch both endpoints simultaneously
-      const [velocityRes, repeatedRes] = await Promise.all([
-        fetch(`${API_BASE}/velocity`),
-        fetch(`${API_BASE}/repeated_withdrawals`),
-      ]);
-
-      if (!velocityRes.ok) throw new Error(`Velocity API: ${velocityRes.status}`);
-      if (!repeatedRes.ok) throw new Error(`Repeated API: ${repeatedRes.status}`);
-
-      const velocityData = await velocityRes.json();
-      const repeatedData = await repeatedRes.json();
-
-      // Normalize Velocity
-      const normVelocity = (Array.isArray(velocityData) ? velocityData : []).map(tx => ({
-        ...tx,
-        anomalyType: tx.anomalyType || "Velocity",
-        severity: tx.severity || (tx.velocity_count >= 10 ? "CRITICAL" : "HIGH"),
-        status: tx.status || "Flagged",
-      }));
-
-      // Normalize Repeated Withdrawals
-      const normRepeated = (Array.isArray(repeatedData) ? repeatedData : []).map(tx => ({
-        ...tx,
-        anomalyType: tx.anomalyType || "Repeated Withdrawals",
-        severity: tx.severity || "HIGH",
-        status: tx.status || "Flagged",
-      }));
-
-      // Deduplicate transactions if a single transaction triggers multiple rules
-      const combinedMap = new Map();
-      [...normVelocity, ...normRepeated].forEach(tx => {
-        if (!combinedMap.has(tx.transaction_id)) {
-          combinedMap.set(tx.transaction_id, tx);
-        } else {
-          // If transaction already exists, combine reasons/flags
-          const existing = combinedMap.get(tx.transaction_id);
-          existing.reason += ` | ${tx.reason}`;
+        const res = await fetch(endpoint);
+        const contentType = res.headers.get("content-type");
+        
+        if (!res.ok) {
+          throw new Error(`API returned status ${res.status}`);
         }
-      });
-
-      const mergedData = Array.from(combinedMap.values());
-
-      if (!cancelled) {
-        setTransactions(mergedData);
-        if (mergedData.length > 0) {
-          setSelectedCustomerId(mergedData[0].customer_id);
+        if (!contentType || !contentType.includes("application/json")) {
+          throw new Error("API did not return JSON (Check if backend route exists)");
         }
+
+        const data = await res.json();
+        const rawTransactions = Array.isArray(data) ? data : [];
+
+        // Normalize database transaction records for the dashboard interface
+        const normalizedData = rawTransactions.map(tx => ({
+          ...tx,
+          amount_kes: tx.amount || 0,
+          anomalyType: tx.flag || "General Anomaly",
+          severity: tx.severity || (tx.amount > 50000 ? "CRITICAL" : "HIGH"),
+          status: tx.is_flagged ? "Flagged" : "Resolved",
+        }));
+
+        if (!cancelled) {
+          setTransactions(normalizedData);
+          if (normalizedData.length > 0 && !selectedCustomerId) {
+            setSelectedCustomerId(normalizedData[0].customer_id);
+          }
+        }
+      } catch (err) {
+        if (!cancelled) { 
+          setError(err.message); 
+        }
+      } finally { 
+        if (!cancelled) setLoading(false); 
       }
-    } catch (err) {
-      if (!cancelled) setError(err.message);
-    } finally {
-      if (!cancelled) setLoading(false);
     }
-  }
 
-  fetchAllAnomalies();
-  return () => {
-    cancelled = true;
-  };
-}, []);
+    fetchDatabaseAnomalies();
+    return () => { cancelled = true; };
+  }, [activeFilter]);
 
-  
-    // GROUP TRANSACTIONS BY CUSTOMER
   const groupTransactionsByCustomer = (txList) => {
     const groups = {};
-    txList.forEach((tx) => {
+    txList.forEach(tx => {
       const cid = tx.customer_id;
       if (!groups[cid]) {
         groups[cid] = {
           customer_id: cid,
-          customer_name: tx.customer_name,
+          customer_name: tx.customer_name || `Customer ${cid}`,
           transactions: [],
           total_amount: 0,
           highest_severity: "LOW",
-          status: "Suspicious",
+          status: "Suspicious" 
         };
       }
       groups[cid].transactions.push(tx);
@@ -104,7 +83,7 @@ useEffect(() => {
         groups[cid].status = "Flagged";
       }
 
-      const severityWeights = { LOW: 1, WARNING: 2, HIGH: 3, CRITICAL: 4 };
+      const severityWeights = { "LOW": 1, "WARNING": 2, "HIGH": 3, "CRITICAL": 4 };
       const currentWeight = severityWeights[tx.severity] || 1;
       const existingWeight = severityWeights[groups[cid].highest_severity] || 1;
       if (currentWeight > existingWeight) {
@@ -116,50 +95,45 @@ useEffect(() => {
 
   const allCustomers = groupTransactionsByCustomer(transactions);
 
-  const flaggedQueue = allCustomers.filter((c) => c.status === "Flagged");
-  const suspiciousWatchlist = allCustomers.filter(
-    (c) => c.status === "Suspicious",
-  );
+  const flaggedQueue = allCustomers.filter(c => c.status === "Flagged");
+  const suspiciousWatchlist = allCustomers.filter(c => c.status === "Suspicious");
 
-  const filteredQueue = flaggedQueue.filter((customer) => {
+  const filteredQueue = flaggedQueue.filter(customer => {
     if (activeFilter === "ALL") return true;
-    return customer.transactions.some((tx) => tx.anomalyType === activeFilter);
+    return customer.transactions.some(tx => 
+      tx.anomalyType.toLowerCase().includes(activeFilter.toLowerCase().replace(/ /g, '_'))
+    );
   });
 
-  const selectedCustomer =
-    allCustomers.find((c) => c.customer_id === selectedCustomerId) || null;
+  const selectedCustomer = allCustomers.find(c => c.customer_id === selectedCustomerId) || null;
 
   const promoteToInvestigation = (customerId) => {
-    setTransactions((prev) =>
-      prev.map((tx) => {
-        if (tx.customer_id === customerId) {
-          return { ...tx, status: "Flagged", severity: "HIGH" };
-        }
-        return tx;
-      }),
-    );
+    setTransactions(prev => prev.map(tx => {
+      if (tx.customer_id === customerId) {
+        return { ...tx, status: "Flagged", severity: "HIGH", is_flagged: true };
+      }
+      return tx;
+    }));
   };
 
   const resolveIncident = (customerId) => {
-    setTransactions((prev) =>
-      prev.map((tx) => {
-        if (tx.customer_id === customerId) {
-          return { ...tx, status: "Resolved" };
-        }
-        return tx;
-      }),
-    );
+    setTransactions(prev => prev.map(tx => {
+      if (tx.customer_id === customerId) {
+        return { ...tx, status: "Resolved", is_flagged: false };
+      }
+      return tx;
+    }));
   };
 
-  if (loading) {
+  if (loading && transactions.length === 0) {
     return (
       <div className="min-h-screen bg-[#121212] text-slate-400 flex items-center justify-center font-mono text-xs">
-        Loading transaction feed...
+        Loading database transaction feed...
       </div>
     );
   }
 
-  if (error) {
+  if (error && transactions.length === 0) {
     return (
       <div className="min-h-screen bg-[#121212] text-[#E74C3C] flex items-center justify-center font-mono text-xs">
         Error: Failed to reach detection API: {error}
@@ -169,49 +143,38 @@ useEffect(() => {
 
   return (
     <div className="min-h-screen bg-[#121212] text-slate-300 flex flex-col font-sans text-xs">
+      
       {/* Header Bar */}
       <header className="border-b border-slate-800 bg-[#181818] px-6 py-4 flex justify-between items-center">
         <div>
           <h1 className="text-base font-bold tracking-tight text-slate-100 uppercase">
             Mlinzi Analyst Triage Core
           </h1>
-          <p className="text-[11px] text-slate-400">
-            Customer Risk Profiles & Threat Detection
-          </p>
+          <p className="text-[11px] text-slate-400">Customer Risk Profiles & Database Threat Detection</p>
         </div>
         <div className="flex gap-4 font-mono">
           <div className="bg-[#1e1e1e] border border-slate-800 px-3 py-1.5 rounded flex items-center gap-2 text-slate-200">
-            <span className="text-[#E74C3C] font-bold">ACTIVE ALERTS:</span>
-            <span className="text-[#E74C3C] font-bold">
-              {flaggedQueue.length}
-            </span>
+            <span className="text-[#E74C3C] font-bold">ACTIVE ALERTS:</span> 
+            <span className="text-[#E74C3C] font-bold">{flaggedQueue.length}</span>
           </div>
           <div className="bg-[#1e1e1e] border border-slate-800 px-3 py-1.5 rounded flex items-center gap-2 text-slate-200">
-            <span className="text-amber-500 font-bold">SUSPICIOUS:</span>
-            <span className="text-amber-500 font-bold">
-              {suspiciousWatchlist.length}
-            </span>
+            <span className="text-amber-500 font-bold">SUSPICIOUS:</span> 
+            <span className="text-amber-500 font-bold">{suspiciousWatchlist.length}</span>
           </div>
         </div>
       </header>
 
       {/* Main Grid Workspace */}
       <main className="flex-1 grid grid-cols-1 xl:grid-cols-3 overflow-hidden divide-y xl:divide-y-0 xl:divide-x divide-slate-800">
+        
         {/* Pane 1: Investigation & Customer Flags Queue */}
         <section className="p-4 overflow-y-auto space-y-4 bg-[#121212]">
           <div>
-            <h2 className="font-bold text-slate-400 uppercase tracking-wider mb-3">
-              Flagged Customers ({filteredQueue.length})
-            </h2>
-
+            <h2 className="font-bold text-slate-400 uppercase tracking-wider mb-3">Flagged Customers ({filteredQueue.length})</h2>
+            
             {/* Filter Pills */}
             <div className="flex flex-wrap gap-1 mb-4">
-              {[
-                "ALL",
-                "Velocity",
-                "Repeated Withdrawals",
-                "Round Number Anomaly",
-              ].map((filterVal) => (
+              {["ALL", "Velocity", "Repeated Withdrawals", "Round Number Anomaly"].map(filterVal => (
                 <button
                   key={filterVal}
                   onClick={() => setActiveFilter(filterVal)}
@@ -228,49 +191,27 @@ useEffect(() => {
           </div>
 
           <div className="space-y-2">
-            {filteredQueue.map((item) => (
+            {filteredQueue.map(item => (
               <div
                 key={item.customer_id}
                 onClick={() => setSelectedCustomerId(item.customer_id)}
                 className={`p-3.5 rounded border transition-all cursor-pointer ${
-                  selectedCustomerId === item.customer_id
-                    ? "bg-[#181818] border-[#E74C3C] shadow-md shadow-rose-950/10"
-                    : "bg-[#181818]/40 border-slate-800/80 hover:border-slate-700"
+                  selectedCustomerId === item.customer_id 
+                    ? 'bg-[#181818] border-[#E74C3C] shadow-md shadow-rose-950/10' 
+                    : 'bg-[#181818]/40 border-slate-800/80 hover:border-slate-700'
                 }`}
               >
                 <div className="flex justify-between items-start font-mono mb-1.5">
-                  <span
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
-                      item.highest_severity === "CRITICAL"
-                        ? "bg-red-950/40 text-[#E74C3C]"
-                        : "bg-amber-950/40 text-amber-500"
-                    }`}
-                  >
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                    item.highest_severity === 'CRITICAL' ? 'bg-red-950/40 text-[#E74C3C]' : 'bg-amber-950/40 text-amber-500'
+                  }`}>
                     {item.highest_severity} RISK
                   </span>
-                  <span className="text-slate-500 text-[10px]">
-                    {item.transactions.length} Transactions
-                  </span>
+                  <span className="text-slate-500 text-[10px]">{item.transactions.length} Transactions</span>
                 </div>
-                <h3 className="font-semibold text-slate-200">
-                  {item.customer_name}
-                </h3>
-                <div className="flex flex-wrap gap-1 mt-1.5">
-                  {Array.from(new Set(item.transactions.map((t) => t.anomalyType))).map(
-                    (type) => (
-                      <span
-                        key={type}
-                        className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-400 font-mono uppercase"
-                      >
-                        {type}
-                      </span>
-                    )
-                  )}
-                </div>
+                <h3 className="font-semibold text-slate-200">{item.customer_name}</h3>
                 <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-800/40">
-                  <span className="text-slate-300 font-bold font-mono">
-                    KES {item.total_amount.toLocaleString()}
-                  </span>
+                  <span className="text-slate-300 font-bold font-mono">KES {item.total_amount.toLocaleString()}</span>
                   <span className="font-semibold text-[#E74C3C] font-mono text-[10px] uppercase">
                     STATUS: {item.status}
                   </span>
@@ -278,9 +219,7 @@ useEffect(() => {
               </div>
             ))}
             {filteredQueue.length === 0 && (
-              <p className="text-slate-500 text-center py-8">
-                No customers matching this risk profile.
-              </p>
+              <p className="text-slate-500 text-center py-8">No customers matching this risk profile.</p>
             )}
           </div>
         </section>
@@ -288,44 +227,34 @@ useEffect(() => {
         {/* Pane 2: Suspicious Activity Watchlist */}
         <section className="p-4 overflow-y-auto space-y-4 bg-[#121212]/40">
           <div>
-            <h2 className="font-bold text-slate-400 uppercase tracking-wider mb-1">
-              Suspicious Watchlist ({suspiciousWatchlist.length})
-            </h2>
-            <p className="text-[11px] text-slate-500">
-              Profiles holding moderate, unflagged anomalies
-            </p>
+            <h2 className="font-bold text-slate-400 uppercase tracking-wider mb-1">Suspicious Watchlist ({suspiciousWatchlist.length})</h2>
+            <p className="text-[11px] text-slate-500">Profiles holding moderate, unflagged anomalies</p>
           </div>
 
           <div className="space-y-2">
-            {suspiciousWatchlist.map((item) => (
+            {suspiciousWatchlist.map(item => (
               <div
                 key={item.customer_id}
                 onClick={() => setSelectedCustomerId(item.customer_id)}
                 className={`p-3.5 rounded border transition-all cursor-pointer group ${
-                  selectedCustomerId === item.customer_id
-                    ? "bg-[#181818] border-amber-500"
-                    : "bg-[#181818]/20 border-slate-800/80 hover:border-slate-700"
+                  selectedCustomerId === item.customer_id 
+                    ? 'bg-[#181818] border-amber-500' 
+                    : 'bg-[#181818]/20 border-slate-800/80 hover:border-slate-700'
                 }`}
               >
                 <div className="flex justify-between items-center font-mono mb-1.5">
                   <span className="text-amber-400 font-semibold bg-amber-950/20 px-1.5 py-0.5 rounded text-[10px] uppercase">
                     PENDING: {item.transactions.length} Actions
                   </span>
-                  <span className="text-slate-500 text-[10px]">
-                    ID: {item.customer_id}
-                  </span>
+                  <span className="text-slate-500 text-[10px]">ID: {item.customer_id}</span>
                 </div>
-                <h3 className="font-medium text-slate-300">
-                  {item.customer_name}
-                </h3>
-
+                <h3 className="font-medium text-slate-300">{item.customer_name}</h3>
+                
                 <div className="mt-3 pt-2 border-t border-slate-800/40 flex justify-between items-center">
-                  <span className="font-mono text-slate-300 font-bold">
-                    KES {item.total_amount.toLocaleString()}
-                  </span>
+                  <span className="font-mono text-slate-300 font-bold">KES {item.total_amount.toLocaleString()}</span>
                   <button
                     onClick={(e) => {
-                      e.stopPropagation();
+                      e.stopPropagation(); 
                       promoteToInvestigation(item.customer_id);
                     }}
                     className="text-[10px] font-bold bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-950 transition-colors px-2 py-1 rounded border border-amber-500/20 uppercase"
@@ -336,9 +265,7 @@ useEffect(() => {
               </div>
             ))}
             {suspiciousWatchlist.length === 0 && (
-              <p className="text-slate-500 text-center py-8">
-                All suspicious customer profiles have been triaged.
-              </p>
+              <p className="text-slate-500 text-center py-8">All suspicious customer profiles have been triaged.</p>
             )}
           </div>
         </section>
@@ -349,77 +276,40 @@ useEffect(() => {
             <div className="space-y-6">
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="font-mono text-slate-500">
-                    ID: {selectedCustomer.customer_id}
-                  </span>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.5 rounded font-mono uppercase font-bold ${
-                      selectedCustomer.status === "Flagged"
-                        ? "bg-red-950/40 text-[#E74C3C]"
-                        : "bg-amber-950/40 text-amber-500"
-                    }`}
-                  >
+                  <span className="font-mono text-slate-500">ID: {selectedCustomer.customer_id}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono uppercase font-bold ${
+                    selectedCustomer.status === "Flagged" ? 'bg-red-950/40 text-[#E74C3C]' : 'bg-amber-950/40 text-amber-500'
+                  }`}>
                     {selectedCustomer.status}
                   </span>
                 </div>
-                <h3 className="text-lg font-bold text-slate-100">
-                  {selectedCustomer.customer_name}
-                </h3>
-                <p className="text-slate-400 mt-1">
-                  Aggregated Profile Value:{" "}
-                  <span className="text-cyan-400 font-mono font-bold">
-                    KES {selectedCustomer.total_amount.toLocaleString()}
-                  </span>
-                </p>
+                <h3 className="text-lg font-bold text-slate-100">{selectedCustomer.customer_name}</h3>
+                <p className="text-slate-400 mt-1">Aggregated Profile Value: <span className="text-cyan-400 font-mono font-bold">KES {selectedCustomer.total_amount.toLocaleString()}</span></p>
               </div>
 
               {/* Dynamic Transaction Logs Container */}
               <div className="space-y-3">
-                <h4 className="font-semibold text-slate-400 uppercase tracking-wider">
-                  // TRANSACTION MANIFEST (
-                  {selectedCustomer.transactions.length})
-                </h4>
-
+                <h4 className="font-semibold text-slate-400 uppercase tracking-wider">// TRANSACTION MANIFEST ({selectedCustomer.transactions.length})</h4>
+                
                 <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
-                  {selectedCustomer.transactions.map((tx) => {
+                  {selectedCustomer.transactions.map((tx, idx) => {
                     const isResolved = tx.status === "Resolved";
                     const isFlagged = tx.status === "Flagged";
                     return (
-                      <div
-                        key={tx.transaction_id}
-                        className="bg-[#121212] p-4 rounded border border-slate-800 font-mono space-y-2"
-                      >
+                      <div key={tx.transaction_id || idx} className="bg-[#121212] p-4 rounded border border-slate-800 font-mono space-y-2">
                         <div className="flex justify-between items-center border-b border-slate-800/60 pb-1.5">
-                          <span className="text-cyan-400 text-[10px]">
-                            TXID: {tx.transaction_id}
-                          </span>
-                          <span className="text-slate-500 text-[10px]">
-                            {tx.timestamp}
-                          </span>
+                          <span className="text-cyan-400 text-[10px]">TXID: {tx.transaction_id}</span>
+                          <span className="text-slate-500 text-[10px]">{tx.timestamp}</span>
                         </div>
                         <div className="flex justify-between">
-                          <div>
-                            <span className="text-slate-500">Amount:</span>{" "}
-                            <span className="text-[#2ECC71] font-bold">
-                              KES {tx.amount_kes.toLocaleString()}
-                            </span>
-                          </div>
-                          <span
-                            className={`text-[10px] font-bold uppercase ${isResolved ? "text-[#2ECC71]" : isFlagged ? "text-[#E74C3C]" : "text-amber-500"}`}
-                          >
+                          <div><span className="text-slate-500">Amount:</span> <span className="text-[#2ECC71] font-bold">KES {(tx.amount_kes || 0).toLocaleString()}</span></div>
+                          <span className={`text-[10px] font-bold uppercase ${isResolved ? 'text-[#2ECC71]' : isFlagged ? 'text-[#E74C3C]' : 'text-amber-500'}`}>
                             {tx.status}
                           </span>
                         </div>
+                        <div><span className="text-slate-500">Engine Type:</span> <span className="text-slate-300">{tx.anomalyType}</span></div>
                         <div>
-                          <span className="text-slate-500">Type:</span>{" "}
-                          <span className="text-slate-300">
-                            {tx.transaction_type} ({tx.channel})
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">
-                            Telemetry Reason:
-                          </span>
+                          <span className="text-slate-500">Telemetry Reason:</span>
                           <span className="text-slate-300 block text-[11px] mt-1 leading-relaxed bg-[#181818] p-1.5 rounded border border-slate-800/60">
                             {tx.reason}
                           </span>
@@ -432,20 +322,13 @@ useEffect(() => {
 
               {/* Dynamic Profile Actions */}
               <div className="space-y-3 pt-4 border-t border-slate-800">
-                <h4 className="font-semibold text-slate-400 uppercase tracking-wider">
-                  Bulk Triage Actions
-                </h4>
-
+                <h4 className="font-semibold text-slate-400 uppercase tracking-wider">Bulk Triage Actions</h4>
+                
                 {selectedCustomer.status === "Suspicious" ? (
                   <div className="bg-amber-950/20 border border-amber-800/40 p-3 rounded text-amber-300 space-y-2">
-                    <p>
-                      This profile is unflagged. Escalating will move all nested
-                      transactions into the Active Flagged Queue.
-                    </p>
+                    <p>This profile is unflagged. Escalating will move all nested transactions into the Active Flagged Queue.</p>
                     <button
-                      onClick={() =>
-                        promoteToInvestigation(selectedCustomer.customer_id)
-                      }
+                      onClick={() => promoteToInvestigation(selectedCustomer.customer_id)}
                       className="w-full bg-amber-500 text-slate-950 font-bold py-2 rounded text-center hover:bg-amber-400 transition uppercase"
                     >
                       Promote Customer Profile
@@ -454,24 +337,14 @@ useEffect(() => {
                 ) : (
                   <div className="flex gap-2">
                     <button
-                      onClick={() =>
-                        resolveIncident(selectedCustomer.customer_id)
-                      }
-                      disabled={selectedCustomer.transactions.every(
-                        (tx) => tx.status === "Resolved",
-                      )}
+                      onClick={() => resolveIncident(selectedCustomer.customer_id)}
+                      disabled={selectedCustomer.transactions.every(tx => tx.status === "Resolved")}
                       className="flex-1 font-bold bg-[#2ECC71] hover:bg-green-400 disabled:bg-slate-800 disabled:text-slate-500 transition py-2.5 rounded text-slate-950 uppercase"
                     >
-                      {selectedCustomer.transactions.every(
-                        (tx) => tx.status === "Resolved",
-                      )
-                        ? "Profile Resolved"
-                        : "Resolve All Incidents"}
+                      {selectedCustomer.transactions.every(tx => tx.status === "Resolved") ? "Profile Resolved" : "Resolve All Incidents"}
                     </button>
-                    <button
-                      disabled={selectedCustomer.transactions.every(
-                        (tx) => tx.status === "Resolved",
-                      )}
+                    <button 
+                      disabled={selectedCustomer.transactions.every(tx => tx.status === "Resolved")}
                       className="font-bold bg-[#E74C3C]/10 border border-[#E74C3C]/20 hover:bg-[#E74C3C] text-[#E74C3C] hover:text-white disabled:opacity-40 transition px-4 py-2.5 rounded uppercase"
                     >
                       Freeze Account
@@ -486,6 +359,7 @@ useEffect(() => {
             </div>
           )}
         </section>
+
       </main>
     </div>
   );

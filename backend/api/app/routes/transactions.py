@@ -1,12 +1,10 @@
-from datetime import date
-from typing import Optional
-
 from fastapi import APIRouter, Depends
 from sqlmodel import Session
-
-from ..database import get_db
 from ..models.transactions import Transaction
+from typing import Optional
+from ..database import get_db
 from ..services.transactions import get_flagged_transactions
+from datetime import date
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -15,31 +13,17 @@ router = APIRouter(prefix="/transactions", tags=["Transactions"])
 def flagged_transaction(
     flag: Optional[str] = None,
     target_date: Optional[date] = None,
-    tolerance_type: str = "percentage",
-    tolerance_value: float = 5,
     db: Session = Depends(get_db),
 ):
-    return get_flagged_transactions(
-        db,
-        target_date or date.today(),
-        flag,
-        tolerance_type,
-        tolerance_value,
-    )
+    active_date = target_date or date.today()
+    return get_flagged_transactions(db, target_date or date.today(), flag)
 
 
-@router.get("/flagged/{flag}", response_model=list[Transaction])
-def flagged_transaction_by_type(
-    flag: str,
+@router.get("/flagged", response_model=list[Transaction])
+def flagged_transaction(
+    flag: Optional[str] = None,
     target_date: Optional[date] = None,
-    tolerance_type: str = "percentage",
-    tolerance_value: float = 5,
     db: Session = Depends(get_db),
 ):
-    return get_flagged_transactions(
-        db,
-        target_date or date.today(),
-        flag,
-        tolerance_type,
-        tolerance_value,
-    )
+    active_date = target_date or date.today()
+    return get_flagged_transactions(db, active_date, flag)
